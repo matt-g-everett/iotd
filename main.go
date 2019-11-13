@@ -13,9 +13,10 @@ import (
 
     "github.com/eclipse/paho.mqtt.golang"
     "github.com/Masterminds/semver"
+    "github.com/matt-g-everett/iotd/otaindex"
 )
 
-type VersionReport struct {
+type versionReport struct {
     IP string `json:"ip"`
     Version string `json:"version"`
 }
@@ -30,9 +31,9 @@ var f mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
     fmt.Printf("SUBSCRIBE TOPIC: %s\n", msg.Topic())
     fmt.Printf("SUBSCRIBE MSGID: %d\n", msg.MessageID())
 
-    var versionReport VersionReport
-    json.Unmarshal(msg.Payload(), &versionReport)
-    fmt.Printf("%#v\n", versionReport)
+    var versionMsg versionReport
+    json.Unmarshal(msg.Payload(), &versionMsg)
+    fmt.Printf("%#v\n", versionMsg)
 }
 
 func main() {
@@ -65,30 +66,32 @@ func main() {
     check(err)
 
     // Sort the binary files by software type
-    binaryIndex := make(map[string][]*semver.Version)
+    otaIndex := otaindex.NewOtaIndex("data/ota")
     for _, file := range fileInfo {
         m := binPattern.FindStringSubmatch(file.Name())
         version, err := semver.NewVersion(m[2])
         check(err)
-        binaryIndex[m[1]] = append(binaryIndex[m[1]], version)
+        otaIndex.Entries[m[1]] = append(otaIndex.Entries[m[1]], version)
     }
 
     // Sort the binary files by version so latest is the first one
-    for softwareType, versions := range binaryIndex {
+    for softwareType, versions := range otaIndex.Entries {
         sort.Slice(versions, func(a, b int) bool {
             return versions[a].GreaterThan(versions[b])
         })
-        binaryIndex[softwareType] = versions
+        otaIndex.Entries[softwareType] = versions
     }
 
-    fmt.Printf("%v\n", binaryIndex)
+    fmt.Printf("%v\n", otaIndex.Entries)
 
-    for softwareType := range binaryIndex {
-        println(softwareType, ":", binaryIndex[softwareType][0].String())
+    for softwareType := range otaIndex.Entries {
+        println(softwareType, ":", otaIndex.Entries[softwareType][0].String())
     }
 
-    dat, err := ioutil.ReadFile(fmt.Sprintf("data/ota/%s_%s.bin", "logger", binaryIndex["logger"][0].String()))
+    dat, err := ioutil.ReadFile(fmt.Sprintf("data/ota/%s_%s.bin", "logger", otaIndex.Entries["logger"][0].String()))
     check(err)
+
+    go otaIndex.WatchDirectory()
 
     for {
         token := c.Publish("home/upgrade", 1, false, string(dat))
