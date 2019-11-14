@@ -1,4 +1,4 @@
-package otaindex
+package ota
 
 import (
 	"io/ioutil"
@@ -11,80 +11,78 @@ import (
     "github.com/Masterminds/semver"
 )
 
-
-
 func check(e error) {
     if e != nil {
         panic(e)
     }
 }
 
-// OtaIndex contains OTA software by type and by version.
-type OtaIndex struct {
+// Index contains OTA software by type and by version.
+type Index struct {
 	Entries map[string][]*semver.Version
 	C chan bool
 	watcher *fsnotify.Watcher
 	directory string
 }
 
-// NewOtaIndex creates a new OtaIndex object.
-func NewOtaIndex(directory string) *OtaIndex {
-	o := new(OtaIndex)
-	o.directory = directory
-	o.Entries = make(map[string][]*semver.Version)
-	o.C = make(chan bool)
+// NewIndex creates a new Index object.
+func NewIndex(directory string) *Index {
+	i := new(Index)
+	i.directory = directory
+	i.Entries = make(map[string][]*semver.Version)
+	i.C = make(chan bool)
 
 	var err error
-	o.watcher, err = fsnotify.NewWatcher()
+	i.watcher, err = fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
 	}
-	o.watcher.Add(o.directory)
-	return o
+	i.watcher.Add(i.directory)
+	return i
 }
 
-func (o *OtaIndex) reload() {
+func (i *Index) reload() {
 	binPattern := regexp.MustCompile(`^([^_]+)_(.*)\.bin$`)
 
 	// The binary files are in the ota directory
-    fileInfo, err := ioutil.ReadDir(o.directory)
+    fileInfo, err := ioutil.ReadDir(i.directory)
 	check(err)
 
 	// Reset the Entries
-	o.Entries = make(map[string][]*semver.Version)
+	i.Entries = make(map[string][]*semver.Version)
 
     // Sort the binary files by software type
     for _, file := range fileInfo {
         m := binPattern.FindStringSubmatch(file.Name())
         version, err := semver.NewVersion(m[2])
         check(err)
-        o.Entries[m[1]] = append(o.Entries[m[1]], version)
+        i.Entries[m[1]] = append(i.Entries[m[1]], version)
     }
 
     // Sort the binary files by version so latest is the first one
-    for softwareType, versions := range o.Entries {
+    for softwareType, versions := range i.Entries {
         sort.Slice(versions, func(a, b int) bool {
             return versions[a].GreaterThan(versions[b])
         })
-        o.Entries[softwareType] = versions
+        i.Entries[softwareType] = versions
 	}
 
-	log.Printf("%v\n", o.Entries)
-	for softwareType := range o.Entries {
-        log.Println(softwareType, ":", o.Entries[softwareType][0].String())
+	log.Printf("%v\n", i.Entries)
+	for softwareType := range i.Entries {
+        log.Println(softwareType, ":", i.Entries[softwareType][0].String())
     }
 }
 
-// WatchDirectory watches the directory associated with the OtaIndex.
-func (o *OtaIndex) WatchDirectory() {
-	debounced := debounce(o.watcher.Events)
+// WatchDirectory watches the directory associated with the Index.
+func (i *Index) WatchDirectory() {
+	debounced := debounce(i.watcher.Events)
 
 	for {
 		select {
-		case <-debounced: // event, ok := <-o.watcher.Events:
-			o.reload()
-			o.C <- true
-		case err, ok := <-o.watcher.Errors:
+		case <-debounced:
+			i.reload()
+			i.C <- true
+		case err, ok := <-i.watcher.Errors:
 			if !ok {
 				return
 			}
@@ -122,9 +120,9 @@ func debounce(toDebounce chan fsnotify.Event) chan bool {
 }
 
 // GetLatest gets the version for the specified software type
-func (o *OtaIndex) GetLatest(softwareType string) (version *semver.Version, found bool) {
+func (i *Index) GetLatest(softwareType string) (version *semver.Version, found bool) {
 	var versions []*semver.Version
-	versions, found = o.Entries[softwareType]
+	versions, found = i.Entries[softwareType]
 	if found {
 		if len(versions) > 0 {
 			version = versions[0]
