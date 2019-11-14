@@ -1,8 +1,8 @@
 package ota
 
 import (
-	"encoding/json"
-	"fmt"
+    "encoding/json"
+    "fmt"
     "io/ioutil"
     "log"
     "os"
@@ -10,42 +10,53 @@ import (
     "reflect"
 
     "github.com/eclipse/paho.mqtt.golang"
+    "github.com/Masterminds/semver"
 )
 
 type versionReport struct {
     IP string `json:"ip"`
+    Type string `json:"type"`
     Version string `json:"version"`
+}
+
+func (vr *versionReport) GetSemVer() *semver.Version {
+    sv, _ := semver.NewVersion(vr.Version)
+    return sv
 }
 
 // Upgrader manages message
 type Upgrader struct {
-	client mqtt.Client
-	index *Index
-	options *mqtt.ClientOptions
+    client mqtt.Client
+    index *Index
+    options *mqtt.ClientOptions
 }
 
 // NewUpgrader instantiates an Upgrader object.
-func NewUpgrader(directory string) *Upgrader {
-	u := new(Upgrader)
-	u.options = mqtt.NewClientOptions().
-		AddBroker("tcp://192.168.1.210:31883").
-		SetClientID("iotd").
-		SetUsername("homeauto").
-		SetPassword("fleabags").
-		SetKeepAlive(30 * time.Second).
-		SetPingTimeout(5 * time.Second)
-	u.index = NewIndex(directory)
+func NewUpgrader(directory string, opts *mqtt.ClientOptions) *Upgrader {
+    u := new(Upgrader)
+    u.options = opts
+    u.index = NewIndex(directory)
 
-	return u
+    return u
 }
 
 func (u *Upgrader) handleVersionMessage(client mqtt.Client, msg mqtt.Message) {
-	log.Printf("SUBSCRIBE TOPIC: %s\n", msg.Topic())
+    log.Printf("SUBSCRIBE TOPIC: %s\n", msg.Topic())
     log.Printf("SUBSCRIBE MSGID: %d\n", msg.MessageID())
 
     var versionMsg versionReport
     json.Unmarshal(msg.Payload(), &versionMsg)
     log.Printf("%#v\n", versionMsg)
+
+    latest, found := u.index.GetLatest(versionMsg.Type)
+    if found {
+        if latest.GreaterThan(versionMsg.GetSemVer()) {
+            log.Printf("###### We should upgrade %s %s @ %s to %s.\n", versionMsg.Type, versionMsg.IP, versionMsg.Version, latest)
+        } else {
+            log.Printf("###### %s %s @ %s is up to date.\n", versionMsg.Type, versionMsg.IP, versionMsg.Version)
+        }
+    }
+    //if versionMsg.Version
 }
 
 func (u *Upgrader) publish() {
@@ -64,9 +75,6 @@ func (u *Upgrader) publish() {
 
 // Run the Upgrader.
 func (u *Upgrader) Run() {
-    mqtt.DEBUG = log.New(os.Stdout, "", 0)
-    mqtt.ERROR = log.New(os.Stdout, "", 0)
-
     u.client = mqtt.NewClient(u.options)
     if token := u.client.Connect(); token.Wait() && token.Error() != nil {
         panic(token.Error())
