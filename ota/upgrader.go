@@ -44,8 +44,7 @@ func NewUpgrader(directory string, opts *mqtt.ClientOptions) *Upgrader {
 }
 
 func (u *Upgrader) handleVersionMessage(client mqtt.Client, msg mqtt.Message) {
-    log.Printf("SUBSCRIBE TOPIC: %s\n", msg.Topic())
-    log.Printf("SUBSCRIBE MSGID: %d\n", msg.MessageID())
+    log.Printf("Received msg %d on %s: %s\n", msg.MessageID(), msg.Topic(), msg.Payload())
 
     var versionMsg versionReport
     json.Unmarshal(msg.Payload(), &versionMsg)
@@ -56,15 +55,14 @@ func (u *Upgrader) handleVersionMessage(client mqtt.Client, msg mqtt.Message) {
         semVersion := versionMsg.GetSemVer()
         if latest.GreaterThan(semVersion) {
             log.Printf("###### We should upgrade %s %s @ %s to %s.\n", versionMsg.Type, versionMsg.IP, versionMsg.Version, latest)
+            if u.upgrade == nil {
+                u.upgrade = NewUpgrade(u, versionMsg.Type, semVersion)
+                u.upgrade.advertise()
+            } else {
+                log.Println("Upgrade already in progress")
+            }
         } else {
             log.Printf("###### %s %s @ %s is up to date.\n", versionMsg.Type, versionMsg.IP, versionMsg.Version)
-        }
-
-        if u.upgrade == nil {
-            u.upgrade = NewUpgrade(u, versionMsg.Type, semVersion)
-            u.upgrade.advertise()
-        } else {
-            log.Println("Upgrade already in progress")
         }
     }
 }
@@ -76,9 +74,9 @@ func (u *Upgrader) publish() {
         check(err)
 
         token := u.client.Publish("home/ota/upgradechannel", 1, false, string(dat))
-        fmt.Println("PUBLISH TOKEN: ", reflect.TypeOf(token))
+        log.Println("PUBLISH TOKEN: ", reflect.TypeOf(token))
         pubToken := token.(*mqtt.PublishToken)
-        fmt.Println("PUBLISH MSGID: ", pubToken.MessageID())
+        log.Println("PUBLISH MSGID: ", pubToken.MessageID())
         token.Wait()
     }
 }
@@ -91,7 +89,7 @@ func (u *Upgrader) Run() {
     }
 
     if token := u.client.Subscribe("home/ota/report", 1, u.handleVersionMessage); token.Wait() && token.Error() != nil {
-        fmt.Println(token.Error())
+        log.Println(token.Error())
         os.Exit(1)
     }
 
