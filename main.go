@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-    mqtt.DEBUG = log.New(os.Stdout, "", 0)
+    // mqtt.DEBUG = log.New(os.Stdout, "", 0)
     mqtt.ERROR = log.New(os.Stdout, "", 0)
 
     options := mqtt.NewClientOptions().

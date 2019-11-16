@@ -38,7 +38,7 @@ func NewUpgrade(upgrader *Upgrader, softwareType string, version *semver.Version
 	u.upgrader = upgrader
 	u.softwareType = softwareType
 	u.version = version
-	u.channelName = "upgrade-" + randomString(8)
+	u.channelName = "home/ota/upgrade-" + randomString(8)
 
 	return u
 }
@@ -57,17 +57,18 @@ func (u *Upgrade) advertise() {
 		log.Println(message)
 		token := u.upgrader.client.Publish("home/ota/advertise", 1, false, message)
         pubToken := token.(*mqtt.PublishToken)
-        fmt.Println("PUBLISH MSGID: ", pubToken.MessageID())
+        log.Printf("Sent message %d on home/ota/advertise\n", pubToken.MessageID())
 		token.Wait()
 
 		time.Sleep(5 * time.Second)
 
 		token = u.upgrader.client.Publish(u.channelName, 1, true, dat)
         pubToken = token.(*mqtt.PublishToken)
-        fmt.Println("PUBLISH MSGID: ", pubToken.MessageID())
+		log.Printf("Sent message %d on %s\n", pubToken.MessageID(), u.channelName)
 		token.Wait()
 
 		// Unhook from the parent so it can do other upgrades
 		u.upgrader.upgrade = nil
+		log.Printf("Software %s sent, exiting upgrade sequence on %s.\n", filePath, u.channelName)
     }
 }
