@@ -67,7 +67,7 @@ func (i *Index) reload() {
         i.Entries[softwareType] = versions
     }
 
-    log.Printf("%v\n", i.Entries)
+    log.Printf("Reloaded index: %v\n", i.Entries)
     for softwareType := range i.Entries {
         log.Println(softwareType, ":", i.Entries[softwareType][0].String())
     }
@@ -81,7 +81,12 @@ func (i *Index) WatchDirectory() {
         select {
         case <-debounced:
             i.reload()
-            i.C <- true
+
+            // Non-blocking message send
+            select {
+            case i.C <- true:
+            default:
+            }
         case err, ok := <-i.watcher.Errors:
             if !ok {
                 return
@@ -108,7 +113,6 @@ func debounce(toDebounce chan fsnotify.Event) chan bool {
 
                 // Reset the timer
                 t.Reset(500 * time.Millisecond)
-
             case <-t.C:
                 // The timer reached completion, relay the message
                 c <- true
