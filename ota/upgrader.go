@@ -6,7 +6,6 @@ import (
     "io/ioutil"
     "log"
     "os"
-    "time"
     "reflect"
 
     "github.com/eclipse/paho.mqtt.golang"
@@ -29,13 +28,17 @@ type Upgrader struct {
     client mqtt.Client
     index *Index
     options *mqtt.ClientOptions
+    directory string
+    upgrade *Upgrade
 }
 
 // NewUpgrader instantiates an Upgrader object.
 func NewUpgrader(directory string, opts *mqtt.ClientOptions) *Upgrader {
     u := new(Upgrader)
     u.options = opts
-    u.index = NewIndex(directory)
+    u.directory = directory
+    u.index = NewIndex(u.directory)
+    u.upgrade = nil
 
     return u
 }
@@ -50,13 +53,20 @@ func (u *Upgrader) handleVersionMessage(client mqtt.Client, msg mqtt.Message) {
 
     latest, found := u.index.GetLatest(versionMsg.Type)
     if found {
-        if latest.GreaterThan(versionMsg.GetSemVer()) {
+        semVersion := versionMsg.GetSemVer()
+        if latest.GreaterThan(semVersion) {
             log.Printf("###### We should upgrade %s %s @ %s to %s.\n", versionMsg.Type, versionMsg.IP, versionMsg.Version, latest)
         } else {
             log.Printf("###### %s %s @ %s is up to date.\n", versionMsg.Type, versionMsg.IP, versionMsg.Version)
         }
+
+        if u.upgrade == nil {
+            u.upgrade = NewUpgrade(u, versionMsg.Type, semVersion)
+            u.upgrade.advertise()
+        } else {
+            log.Println("Upgrade already in progress")
+        }
     }
-    //if versionMsg.Version
 }
 
 func (u *Upgrader) publish() {
@@ -65,7 +75,7 @@ func (u *Upgrader) publish() {
         dat, err := ioutil.ReadFile(fmt.Sprintf("data/ota/%s_%s.bin", "logger", v.String()))
         check(err)
 
-        token := u.client.Publish("home/upgrade", 1, false, string(dat))
+        token := u.client.Publish("home/ota/upgradechannel", 1, false, string(dat))
         fmt.Println("PUBLISH TOKEN: ", reflect.TypeOf(token))
         pubToken := token.(*mqtt.PublishToken)
         fmt.Println("PUBLISH MSGID: ", pubToken.MessageID())
@@ -80,20 +90,20 @@ func (u *Upgrader) Run() {
         panic(token.Error())
     }
 
-    if token := u.client.Subscribe("home/versions", 1, u.handleVersionMessage); token.Wait() && token.Error() != nil {
+    if token := u.client.Subscribe("home/ota/report", 1, u.handleVersionMessage); token.Wait() && token.Error() != nil {
         fmt.Println(token.Error())
         os.Exit(1)
     }
 
-    go u.index.WatchDirectory()
+    u.index.WatchDirectory()
 
-    publishTimer := time.NewTicker(5 * time.Second)
-    for {
-        select {
-        case <-u.index.C:
-            log.Println("###### RELOADED")
-        case <-publishTimer.C:
-            u.publish()
-        }
-    }
+    // publishTimer := time.NewTicker(5 * time.Second)
+    // for {
+    //     select {
+    //     case <-u.index.C:
+    //         log.Println("###### RELOADED")
+    //     case <-publishTimer.C:
+    //         u.publish()
+    //     }
+    // }
 }
