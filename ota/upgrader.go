@@ -36,11 +36,19 @@ type Upgrader struct {
 func NewUpgrader(directory string, opts *mqtt.ClientOptions) *Upgrader {
     u := new(Upgrader)
     u.options = opts
+    u.options.SetOnConnectHandler(u.handleOnConnect)
     u.directory = directory
     u.index = NewIndex(u.directory)
     u.upgrade = nil
 
     return u
+}
+
+func (u *Upgrader) handleOnConnect(client mqtt.Client) {
+    if token := u.client.Subscribe("home/ota/report", 1, u.handleVersionMessage); token.Wait() && token.Error() != nil {
+        log.Println(token.Error())
+        os.Exit(1)
+    }
 }
 
 func (u *Upgrader) handleVersionMessage(client mqtt.Client, msg mqtt.Message) {
@@ -73,7 +81,7 @@ func (u *Upgrader) publish() {
         dat, err := ioutil.ReadFile(fmt.Sprintf("data/ota/%s_%s.bin", "logger", v.String()))
         check(err)
 
-        token := u.client.Publish("home/ota/upgradechannel", 1, false, string(dat))
+        token := u.client.Publish("home/ota/upgradechannel", 0, false, string(dat))
         log.Println("PUBLISH TOKEN: ", reflect.TypeOf(token))
         pubToken := token.(*mqtt.PublishToken)
         log.Println("PUBLISH MSGID: ", pubToken.MessageID())
@@ -86,11 +94,6 @@ func (u *Upgrader) Run() {
     u.client = mqtt.NewClient(u.options)
     if token := u.client.Connect(); token.Wait() && token.Error() != nil {
         panic(token.Error())
-    }
-
-    if token := u.client.Subscribe("home/ota/report", 1, u.handleVersionMessage); token.Wait() && token.Error() != nil {
-        log.Println(token.Error())
-        os.Exit(1)
     }
 
     u.index.WatchDirectory()
