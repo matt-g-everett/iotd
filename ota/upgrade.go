@@ -46,7 +46,7 @@ func NewUpgrade(upgrader *Upgrader, softwareType string, version *semver.Version
 func (u *Upgrade) advertise() {
     v, found := u.upgrader.index.GetLatest(u.softwareType)
     if found {
-		filePath := fmt.Sprintf("%s/%s_%s.bin", u.upgrader.directory, u.softwareType, u.version.String())
+		filePath := fmt.Sprintf("%s/%s_%s.bin", u.upgrader.directory, u.softwareType, v.String())
 		log.Printf("filepath: %s\n", filePath)
 		dat, err := ioutil.ReadFile(filePath)
         check(err)
@@ -55,17 +55,22 @@ func (u *Upgrade) advertise() {
 
 		message := fmt.Sprintf("%s\n%s\n%s\n%08x", "logger", v.String(), u.channelName, crc)
 		log.Println(message)
-		token := u.upgrader.client.Publish("home/ota/advertise", 1, false, message)
+		token := u.upgrader.client.Publish("home/ota/advertise", 0, false, message)
         pubToken := token.(*mqtt.PublishToken)
         log.Printf("Sent message %d on home/ota/advertise\n", pubToken.MessageID())
-		token.Wait()
+		if token.WaitTimeout(10 * time.Second) {
+			// Give clients an opportunity to subscribe
+			time.Sleep(5 * time.Second)
 
-		time.Sleep(5 * time.Second)
-
-		token = u.upgrader.client.Publish(u.channelName, 1, true, dat)
-        pubToken = token.(*mqtt.PublishToken)
-		log.Printf("Sent message %d on %s\n", pubToken.MessageID(), u.channelName)
-		token.Wait()
+			token = u.upgrader.client.Publish(u.channelName, 0, true, dat)
+			pubToken = token.(*mqtt.PublishToken)
+			log.Printf("Sent message %d on %s\n", pubToken.MessageID(), u.channelName)
+			if !token.WaitTimeout(10 * time.Second) {
+				log.Println("Software failed to send.")
+			}
+		} else {
+			log.Println("Failed to advertise software.")
+		}
 
 		// Unhook from the parent so it can do other upgrades
 		u.upgrader.upgrade = nil
