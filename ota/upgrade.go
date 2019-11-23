@@ -60,7 +60,7 @@ func (u *Upgrade) advertise() {
         log.Printf("Sent message %d on home/ota/advertise\n", pubToken.MessageID())
 		if token.WaitTimeout(10 * time.Second) {
 			// Give clients an opportunity to subscribe
-			time.Sleep(5 * time.Second)
+			time.Sleep(2 * time.Second)
 
 			token = u.upgrader.client.Publish(u.channelName, 0, true, dat)
 			pubToken = token.(*mqtt.PublishToken)
