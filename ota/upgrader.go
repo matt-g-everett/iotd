@@ -5,8 +5,6 @@ import (
     "fmt"
     "io/ioutil"
     "log"
-    "os"
-    "reflect"
 
     "github.com/eclipse/paho.mqtt.golang"
     "github.com/Masterminds/semver"
@@ -27,16 +25,14 @@ func (vr *versionReport) GetSemVer() *semver.Version {
 type Upgrader struct {
     client mqtt.Client
     index *Index
-    options *mqtt.ClientOptions
     directory string
     upgrade *Upgrade
 }
 
 // NewUpgrader instantiates an Upgrader object.
-func NewUpgrader(directory string, opts *mqtt.ClientOptions) *Upgrader {
+func NewUpgrader(client mqtt.Client, directory string) *Upgrader {
     u := new(Upgrader)
-    u.options = opts
-    u.options.SetOnConnectHandler(u.handleOnConnect)
+    u.client = client
     u.directory = directory
     u.index = NewIndex(u.directory)
     u.upgrade = nil
@@ -44,14 +40,8 @@ func NewUpgrader(directory string, opts *mqtt.ClientOptions) *Upgrader {
     return u
 }
 
-func (u *Upgrader) handleOnConnect(client mqtt.Client) {
-    if token := u.client.Subscribe("home/ota/report", 1, u.handleVersionMessage); token.Wait() && token.Error() != nil {
-        log.Println(token.Error())
-        os.Exit(1)
-    }
-}
-
-func (u *Upgrader) handleVersionMessage(client mqtt.Client, msg mqtt.Message) {
+// HandleVersionMessage handles an iotp version message over MQTT.
+func (u *Upgrader) HandleVersionMessage(client mqtt.Client, msg mqtt.Message) {
     log.Printf("Received msg %d on %s: %s\n", msg.MessageID(), msg.Topic(), msg.Payload())
 
     var versionMsg versionReport
@@ -82,7 +72,6 @@ func (u *Upgrader) publish() {
         check(err)
 
         token := u.client.Publish("home/ota/upgradechannel", 0, false, string(dat))
-        log.Println("PUBLISH TOKEN: ", reflect.TypeOf(token))
         pubToken := token.(*mqtt.PublishToken)
         log.Println("PUBLISH MSGID: ", pubToken.MessageID())
         token.Wait()
@@ -91,20 +80,5 @@ func (u *Upgrader) publish() {
 
 // Run the Upgrader.
 func (u *Upgrader) Run() {
-    u.client = mqtt.NewClient(u.options)
-    if token := u.client.Connect(); token.Wait() && token.Error() != nil {
-        panic(token.Error())
-    }
-
     u.index.WatchDirectory()
-
-    // publishTimer := time.NewTicker(5 * time.Second)
-    // for {
-    //     select {
-    //     case <-u.index.C:
-    //         log.Println("###### RELOADED")
-    //     case <-publishTimer.C:
-    //         u.publish()
-    //     }
-    // }
 }
