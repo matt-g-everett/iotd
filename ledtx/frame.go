@@ -19,7 +19,7 @@ func NewFrame() (*Frame) {
 
 // MarshalBinary converts a Frame into binary data.
 func (f *Frame) MarshalBinary() (data []byte, err error) {
-	data = make([]byte, 0, 152)
+	data = make([]byte, 2, 152)
 	binary.LittleEndian.PutUint16(data, 50)
 	for _, p := range f.pixels {
 		r, g, b := p.Clamped().RGB255()

@@ -25,7 +25,7 @@ func (s *Streamer) SendFrame() {
 	f := NewFrame()
 
 	for i := 0; i < len(f.pixels); i++ {
-		c, _ := colorful.Hex("#FF0000")
+		c, _ := colorful.Hex("#0a0b0c")
 		f.pixels[i] = c
 	}
 
@@ -41,7 +41,6 @@ func (s *Streamer) Run() {
 	publishTimer := time.NewTicker(1 * time.Second)
 	for {
 		<-publishTimer.C
-		//s.SendFrame()
-		log.Println("Sending frame...")
+		s.SendFrame()
 	}
 }
