@@ -6,7 +6,7 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 )
 
-const numPixels = 100
+const numPixels = 500
 
 // Frame represents a frame of RGB pixels to display on an ledrx device.
 type Frame struct {

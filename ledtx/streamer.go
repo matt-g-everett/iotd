@@ -1,6 +1,7 @@
 package ledtx
 
 import (
+	"math"
 	"time"
 
 	"github.com/eclipse/paho.mqtt.golang"
@@ -10,7 +11,7 @@ import (
 type Streamer struct {
 	client mqtt.Client
 	rainbow GradientTable
-	current int
+	current float64
 	trailLength int
 }
 
@@ -43,13 +44,13 @@ func (s *Streamer) SendFrame() {
 	luminance := 0.05
 	numPixels := len(f.pixels)
 	for i := 0; i < numPixels; i++ {
-		t := float64(((i + numPixels) - s.current) % s.trailLength) / float64(s.trailLength)
+		t := math.Mod((float64(i + numPixels) - s.current), float64(s.trailLength)) / float64(s.trailLength)
 		c := s.rainbow.GetColor(t, saturation, luminance)
 		f.pixels[i] = c
 	}
 
-	s.current++
-	s.current = s.current % numPixels
+	s.current += 2.0
+	s.current = math.Mod(s.current, float64(numPixels))
 
 	b, _ := f.MarshalBinary()
 	token := s.client.Publish("home/xmastree/stream", 0, false, b)
