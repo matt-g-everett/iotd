@@ -6,14 +6,12 @@ import (
     "time"
 
     "github.com/eclipse/paho.mqtt.golang"
-    "github.com/matt-g-everett/iotd/ledtx"
     "github.com/matt-g-everett/iotd/ota"
 )
 
 type app struct {
     Client mqtt.Client
     Upgrader *ota.Upgrader
-    Streamer *ledtx.Streamer
 }
 
 func newApp() *app {
@@ -32,7 +30,6 @@ func (a *app) run() {
     if token := a.Client.Connect(); token.Wait() && token.Error() != nil {
         panic(token.Error())
     }
-    go a.Streamer.Run()
     a.Upgrader.Run()
 }
 
@@ -54,7 +51,6 @@ func main() {
 
     a.Client = client
     a.Upgrader = ota.NewUpgrader(client, "data/ota")
-    a.Streamer = ledtx.NewStreamer(client)
 
     a.run()
 }
