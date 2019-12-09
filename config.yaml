@@ -1,0 +1,9 @@
+softwareDirectory: data/ota
+mqtt:
+  username: user
+  password: password
+  url: tcp://10.0.0.1:31883
+  topics:
+    advertise: home/ota/advertise
+    report: home/ota/report
+    upgrade: home/ota/upgrade-
