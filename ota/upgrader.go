@@ -2,8 +2,6 @@ package ota
 
 import (
     "encoding/json"
-    "fmt"
-    "io/ioutil"
     "log"
 
     "github.com/eclipse/paho.mqtt.golang"
@@ -24,17 +22,17 @@ func (vr *versionReport) GetSemVer() *semver.Version {
 // Upgrader manages message
 type Upgrader struct {
     client mqtt.Client
+    Config Config
     index *Index
-    directory string
     upgrade *Upgrade
 }
 
 // NewUpgrader instantiates an Upgrader object.
-func NewUpgrader(client mqtt.Client, directory string) *Upgrader {
+func NewUpgrader(client mqtt.Client, config Config) *Upgrader {
     u := new(Upgrader)
     u.client = client
-    u.directory = directory
-    u.index = NewIndex(u.directory)
+    u.Config = config
+    u.index = NewIndex(u.Config.SoftwareDirectory)
     u.upgrade = nil
 
     return u
@@ -62,19 +60,6 @@ func (u *Upgrader) HandleVersionMessage(client mqtt.Client, msg mqtt.Message) {
         } else {
             log.Printf("###### %s %s @ %s is up to date.\n", versionMsg.Type, versionMsg.IP, versionMsg.Version)
         }
-    }
-}
-
-func (u *Upgrader) publish() {
-    v, found := u.index.GetLatest("logger")
-    if found {
-        dat, err := ioutil.ReadFile(fmt.Sprintf("data/ota/%s_%s.bin", "logger", v.String()))
-        check(err)
-
-        token := u.client.Publish("home/ota/upgradechannel", 0, false, string(dat))
-        pubToken := token.(*mqtt.PublishToken)
-        log.Println("PUBLISH MSGID: ", pubToken.MessageID())
-        token.Wait()
     }
 }
 

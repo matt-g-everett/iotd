@@ -38,7 +38,7 @@ func NewUpgrade(upgrader *Upgrader, softwareType string, version *semver.Version
 	u.upgrader = upgrader
 	u.softwareType = softwareType
 	u.version = version
-	u.channelName = "home/ota/upgrade-" + randomString(8)
+	u.channelName = u.upgrader.Config.Mqtt.Topics.Upgrade + randomString(8)
 
 	return u
 }
@@ -46,7 +46,7 @@ func NewUpgrade(upgrader *Upgrader, softwareType string, version *semver.Version
 func (u *Upgrade) advertise() {
     v, found := u.upgrader.index.GetLatest(u.softwareType)
     if found {
-		filePath := fmt.Sprintf("%s/%s_%s.bin", u.upgrader.directory, u.softwareType, v.String())
+		filePath := fmt.Sprintf("%s/%s_%s.bin", u.upgrader.Config.SoftwareDirectory, u.softwareType, v.String())
 		log.Printf("filepath: %s\n", filePath)
 		dat, err := ioutil.ReadFile(filePath)
         check(err)
@@ -55,9 +55,9 @@ func (u *Upgrade) advertise() {
 
 		message := fmt.Sprintf("%s\n%s\n%s\n%08x", "logger", v.String(), u.channelName, crc)
 		log.Println(message)
-		token := u.upgrader.client.Publish("home/ota/advertise", 0, false, message)
+		token := u.upgrader.client.Publish(u.upgrader.Config.Mqtt.Topics.Advertise, 0, false, message)
         pubToken := token.(*mqtt.PublishToken)
-        log.Printf("Sent message %d on home/ota/advertise\n", pubToken.MessageID())
+        log.Printf("Sent message %d on %s\n", pubToken.MessageID(), u.upgrader.Config.Mqtt.Topics.Advertise)
 		if token.WaitTimeout(10 * time.Second) {
 			// Give clients an opportunity to subscribe
 			time.Sleep(2 * time.Second)
